@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>노라보자</title>
+    <link rel="stylesheet" href="styles.css">
+  </head>
+  <body>
+    <main class="app-shell">
+      <section class="hero">
+        <div>
+          <p class="eyebrow">약속 일정잡기</p>
+          <h1>노라보자</h1>
+          <p class="subtitle">각자 가능한 날짜를 찍으면 가장 많이 겹치는 날을 바로 보여줘요.</p>
+        </div>
+        <div class="event-panel">
+          <label for="eventTitle">약속 이름</label>
+          <div class="input-row title-row">
+            <input id="eventTitle" type="text" value="5월 친구 모임" maxlength="32">
+            <button id="saveTitleButton" type="button">저장</button>
+          </div>
+        </div>
+      </section>
+
+      <section class="share-panel" aria-label="공유 링크">
+        <div>
+          <h2>초대 링크</h2>
+          <p id="roomStatus" class="status-copy">방을 준비하고 있어요.</p>
+        </div>
+        <div class="share-actions">
+          <input id="shareLink" type="text" readonly aria-label="공유 링크">
+          <button id="copyLinkButton" type="button">복사</button>
+          <button id="newRoomButton" type="button">새 약속</button>
+        </div>
+      </section>
+
+      <section class="workspace" aria-label="약속 일정 조율">
+        <aside class="sidebar">
+          <form id="participantForm" class="participant-form">
+            <label for="participantName">내 이름</label>
+            <div class="input-row">
+              <input id="participantName" type="text" placeholder="예: 지혜" maxlength="12" required>
+              <button type="submit">참여</button>
+            </div>
+          </form>
+
+          <div>
+            <h2>참여자</h2>
+            <ul id="participantList" class="participant-list"></ul>
+          </div>
+
+          <div class="recommendation">
+            <h2>추천 날짜</h2>
+            <div id="bestDates" class="best-dates"></div>
+          </div>
+        </aside>
+
+        <section class="calendar-area">
+          <div class="toolbar">
+            <button id="prevMonth" class="icon-button" type="button" aria-label="이전 달">‹</button>
+            <h2 id="monthLabel"></h2>
+            <button id="nextMonth" class="icon-button" type="button" aria-label="다음 달">›</button>
+          </div>
+
+          <div class="calendar" id="calendar"></div>
+          <div class="selection-note" id="selectionNote"></div>
+        </section>
+      </section>
+    </main>
+
+    <script src="scheduler.js"></script>
+    <script src="app.js"></script>
+  </body>
+</html>

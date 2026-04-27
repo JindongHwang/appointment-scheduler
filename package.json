@@ -1,0 +1,10 @@
+{
+  "name": "nolaboda",
+  "version": "0.1.0",
+  "private": true,
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node scheduler.test.js && node roomStore.test.js && node storeFactory.test.js && node envLoader.test.js && node supabaseRoomStore.test.js && node api.test.js && node --check app.js && node --check server.js && node --check supabaseRoomStore.js && node --check storeFactory.js && node --check envLoader.js"
+  }
+}
