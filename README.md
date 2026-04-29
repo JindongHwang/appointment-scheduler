@@ -69,12 +69,14 @@ node roomStore.test.js
 node storeFactory.test.js
 node envLoader.test.js
 node supabaseRoomStore.test.js
+node roomSession.test.js
 node api.test.js
 node --check app.js
 node --check server.js
 node --check supabaseRoomStore.js
 node --check storeFactory.js
 node --check envLoader.js
+node --check roomSession.js
 ```
 
 Or run everything:

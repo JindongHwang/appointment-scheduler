@@ -9,7 +9,7 @@ if (process.env.SKIP_ENV_FILE !== '1') {
   loadEnvFile(path.join(rootDir, '.env'));
 }
 
-const publicFiles = new Set(['/index.html', '/styles.css', '/scheduler.js', '/app.js']);
+const publicFiles = new Set(['/index.html', '/styles.css', '/scheduler.js', '/roomSession.js', '/app.js']);
 const port = Number(process.env.PORT || 3000);
 const host = process.env.HOST || '0.0.0.0';
 const dbPath = process.env.DB_PATH || path.join(rootDir, 'rooms.db.json');

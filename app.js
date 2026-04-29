@@ -2,9 +2,11 @@ const colors = ['#4f9d76', '#ef7d6b', '#5f8fc7', '#e4b94f', '#9b72cf'];
 const weekdays = ['일', '월', '화', '수', '목', '금', '토'];
 const defaultTitle = '5월 친구 모임';
 const isServerMode = window.location.protocol === 'http:' || window.location.protocol === 'https:';
+const activeParticipantKey = 'nolaboda.activeParticipantId';
+const lastRoomKey = 'nolaboda.lastRoomId';
 
 let visibleDate = new Date(2026, 4, 1);
-let activeParticipantId = window.localStorage.getItem('nolaboda.activeParticipantId');
+let activeParticipantId = window.localStorage.getItem(activeParticipantKey);
 let room = null;
 
 const calendarEl = document.querySelector('#calendar');
@@ -46,7 +48,7 @@ participantForm.addEventListener('submit', async (event) => {
       : addLocalParticipant(name);
 
     activeParticipantId = participant.id;
-    window.localStorage.setItem('nolaboda.activeParticipantId', activeParticipantId);
+    window.localStorage.setItem(activeParticipantKey, activeParticipantId);
     participantNameInput.value = '';
     await refreshRoom();
     setStatus('참여자가 추가됐어요.');
@@ -92,13 +94,14 @@ newRoomButton.addEventListener('click', async () => {
         method: 'POST',
         body: { title: defaultTitle },
       });
+      rememberRoom(room.id);
       updateRoomUrl(room.id);
     } else {
       room = createLocalRoom();
       saveLocalRoom();
     }
     activeParticipantId = null;
-    window.localStorage.removeItem('nolaboda.activeParticipantId');
+    window.localStorage.removeItem(activeParticipantKey);
     render();
     setStatus('새 약속 링크를 만들었어요.');
   } catch (error) {
@@ -125,18 +128,31 @@ async function init() {
 }
 
 async function initServerRoom() {
-  const roomId = new URLSearchParams(window.location.search).get('room');
+  const roomId = resolveInitialRoomId(
+    window.location.search,
+    window.localStorage.getItem(lastRoomKey)
+  );
 
   if (roomId) {
-    room = await api(`/api/rooms/${roomId}`);
-    setStatus('초대 링크로 들어왔어요.');
-    return;
+    try {
+      room = await api(`/api/rooms/${roomId}`);
+      rememberRoom(room.id);
+      updateRoomUrl(room.id);
+      setStatus(new URLSearchParams(window.location.search).get('room') ? '초대 링크로 들어왔어요.' : '마지막 약속을 불러왔어요.');
+      return;
+    } catch (error) {
+      window.localStorage.removeItem(lastRoomKey);
+      if (new URLSearchParams(window.location.search).get('room')) {
+        throw error;
+      }
+    }
   }
 
   room = await api('/api/rooms', {
     method: 'POST',
     body: { title: defaultTitle },
   });
+  rememberRoom(room.id);
   updateRoomUrl(room.id);
   setStatus('새 약속 링크를 만들었어요.');
 }
@@ -190,7 +206,7 @@ function renderParticipants() {
     button.textContent = participant.id === activeParticipantId ? '선택 중' : '선택';
     button.addEventListener('click', () => {
       activeParticipantId = participant.id;
-      window.localStorage.setItem('nolaboda.activeParticipantId', activeParticipantId);
+      window.localStorage.setItem(activeParticipantKey, activeParticipantId);
       render();
     });
 
@@ -356,7 +372,7 @@ function ensureActiveParticipant() {
 
   activeParticipantId = room.participants[0]?.id || null;
   if (activeParticipantId) {
-    window.localStorage.setItem('nolaboda.activeParticipantId', activeParticipantId);
+    window.localStorage.setItem(activeParticipantKey, activeParticipantId);
   }
 }
 
@@ -407,9 +423,7 @@ async function api(path, options = {}) {
 }
 
 function updateRoomUrl(roomId) {
-  const url = new URL(window.location.href);
-  url.searchParams.set('room', roomId);
-  window.history.replaceState({}, '', url);
+  window.history.replaceState({}, '', buildRoomUrl(window.location.href, roomId));
 }
 
 function getShareLink() {
@@ -417,9 +431,7 @@ function getShareLink() {
     return '서버 실행 후 링크가 표시됩니다.';
   }
 
-  const url = new URL(window.location.href);
-  url.searchParams.set('room', room.id);
-  return url.toString();
+  return buildRoomUrl(window.location.href, room.id);
 }
 
 function getActiveParticipant() {
@@ -428,6 +440,10 @@ function getActiveParticipant() {
 
 function setStatus(message) {
   roomStatusEl.textContent = message;
+}
+
+function rememberRoom(roomId) {
+  window.localStorage.setItem(lastRoomKey, roomId);
 }
 
 function formatDate(year, month, day) {
