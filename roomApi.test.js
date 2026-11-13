@@ -3,6 +3,7 @@ const {
   createRoomApi,
   createConfiguredRoomApi,
   normalizeSupabaseUrl,
+  describeFailure,
   buildHeaders,
   isSecretKey,
 } = require('./roomApi');
@@ -103,6 +104,14 @@ test('surfaces the message from a failed request', async () => {
   const { fetchImpl } = fakeFetch({ status: 400, body: { code: 'P0001', message: '참여자를 찾을 수 없어요.' } });
   const api = createRoomApi({ supabaseUrl: 'https://example.supabase.co', supabaseKey: 'sb_publishable_abc', fetch: fetchImpl });
   await assert.rejects(() => api.toggleParticipantDate('room_1', 'p_x', '2026-11-21'), /참여자를 찾을 수 없어요/);
+});
+
+test('explains common setup problems instead of showing the raw error', () => {
+  assert.match(describeFailure(404, { code: 'PGRST202', message: 'Could not find the function' }), /supabase-schema\.sql/);
+  assert.match(describeFailure(540, null), /일시정지/);
+  assert.match(describeFailure(401, { message: 'Invalid API key' }), /config\.js/);
+  assert.equal(describeFailure(400, { code: 'P0001', message: '참여자를 찾을 수 없어요.' }), '참여자를 찾을 수 없어요.');
+  assert.equal(describeFailure(500, null), '요청에 실패했어요.');
 });
 
 test('reports a connection problem when the request cannot be sent', async () => {

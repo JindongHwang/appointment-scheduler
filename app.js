@@ -95,11 +95,21 @@ copyLinkButton.addEventListener('click', async () => {
 });
 
 newRoomButton.addEventListener('click', async () => {
+  // 다른 사람이 이미 참여한 약속에서 실수로 빠져나가지 않도록 한 번 묻는다.
+  if (isSharedMode && room.id && room.participants.length > 0) {
+    const leave = window.confirm(
+      '지금 약속에서 나가 새 약속을 만들까요?\n원래 약속은 그대로 남고, 초대 링크로 다시 들어올 수 있어요.'
+    );
+    if (!leave) return;
+  }
+
   try {
     if (isSharedMode) {
       room = await change(() => roomApi.createRoom({ title: defaultTitle }));
       rememberRoom(room.id);
       updateRoomUrl(room.id);
+      setConnected(true);
+      startAutoRefresh();
     } else {
       room = createLocalRoom();
       saveLocalRoom();
@@ -114,22 +124,44 @@ newRoomButton.addEventListener('click', async () => {
 });
 
 async function init() {
-  try {
-    if (isSharedMode) {
-      await initSharedRoom();
-      startAutoRefresh();
-    } else {
+  if (!isSharedMode) {
+    try {
       room = loadLocalRoom();
-      setStatus(configError || 'config.js에 Supabase 주소와 키를 넣으면 친구에게 보낼 수 있는 링크가 생겨요.');
+    } catch {
+      room = createLocalRoom();
     }
     ensureActiveParticipant();
     render();
-  } catch (error) {
-    room = createLocalRoom();
+    setStatus(configError || 'config.js에 Supabase 주소와 키를 넣으면 친구에게 보낼 수 있는 링크가 생겨요.');
+    return;
+  }
+
+  try {
+    await initSharedRoom();
+    setConnected(true);
+    startAutoRefresh();
     ensureActiveParticipant();
+    render();
+  } catch (error) {
+    // 연결에 실패하면 예시 데이터 대신 빈 화면과 안내만 보여 준다.
+    room = createEmptyRoom();
+    setConnected(false);
     render();
     setStatus(error.message);
   }
+}
+
+function createEmptyRoom() {
+  return { id: '', title: defaultTitle, confirmedDate: '', participants: [] };
+}
+
+// 방에 연결되지 않은 동안에는 저장할 곳이 없으므로 입력을 막는다. "새 약속"은 다시 시도하는 용도로 남겨 둔다.
+function setConnected(connected) {
+  [participantNameInput, participantForm.querySelector('button'), eventTitleInput, saveTitleButton, copyLinkButton].forEach(
+    (element) => {
+      element.disabled = !connected;
+    }
+  );
 }
 
 async function initSharedRoom() {
@@ -420,7 +452,10 @@ async function change(run) {
 }
 
 // 다른 사람이 고른 날짜가 새로고침 없이 보이도록 주기적으로 방을 다시 읽는다.
+let autoRefreshStarted = false;
 function startAutoRefresh() {
+  if (autoRefreshStarted) return;
+  autoRefreshStarted = true;
   window.setInterval(refreshFromOthers, refreshIntervalMs);
   document.addEventListener('visibilitychange', () => {
     if (!document.hidden) refreshFromOthers();
@@ -428,7 +463,7 @@ function startAutoRefresh() {
 }
 
 async function refreshFromOthers() {
-  if (!room || document.hidden || pendingChanges > 0) return;
+  if (!room || !room.id || document.hidden || pendingChanges > 0) return;
 
   const roomId = room.id;
   const seenChanges = changeCount;
@@ -451,6 +486,9 @@ function updateRoomUrl(roomId) {
 function getShareLink() {
   if (!isSharedMode) {
     return 'Supabase 설정 후 링크가 표시됩니다.';
+  }
+  if (!room.id) {
+    return '연결되면 링크가 표시됩니다.';
   }
 
   return buildRoomUrl(window.location.href, room.id);

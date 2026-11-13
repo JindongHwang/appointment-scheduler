@@ -22,7 +22,9 @@ function createRoomApi(options = {}) {
         body: JSON.stringify(args),
       });
     } catch {
-      throw new Error('서버에 연결하지 못했어요. 인터넷 연결을 확인해 주세요.');
+      throw new Error(
+        '서버에 연결하지 못했어요. 인터넷 연결을 확인해 주세요. 계속 안 되면 Supabase 프로젝트가 일시정지된 것일 수 있어요.'
+      );
     }
 
     const text = await response.text();
@@ -34,7 +36,7 @@ function createRoomApi(options = {}) {
     }
 
     if (!response.ok) {
-      throw new Error((data && (data.message || data.error)) || '요청에 실패했어요.');
+      throw new Error(describeFailure(response.status, data));
     }
     return data;
   }
@@ -42,7 +44,7 @@ function createRoomApi(options = {}) {
   async function getRoom(roomId) {
     const room = await rpc('get_room', { p_room_id: roomId });
     if (!room) {
-      throw new Error('약속을 찾을 수 없어요.');
+      throw new Error("약속을 찾을 수 없어요. 초대 링크를 다시 확인하거나 '새 약속'을 눌러 주세요.");
     }
     return room;
   }
@@ -78,6 +80,21 @@ function createConfiguredRoomApi(config, options = {}) {
     return null;
   }
   return createRoomApi({ ...config, ...options });
+}
+
+// Turns the common setup problems into a message that says what to do.
+function describeFailure(status, data) {
+  const code = data && data.code;
+  if (status === 540) {
+    return 'Supabase 프로젝트가 일시정지돼 있어요. Supabase 대시보드에서 프로젝트를 다시 켜 주세요.';
+  }
+  if (code === 'PGRST202' || code === 'PGRST205') {
+    return 'Supabase에 필요한 함수가 없어요. SQL Editor에서 supabase-schema.sql을 실행해 주세요.';
+  }
+  if (status === 401 || status === 403 || code === '42501') {
+    return 'Supabase가 요청을 거부했어요. config.js의 주소와 공개 키를 확인하고, supabase-schema.sql을 다시 실행해 주세요.';
+  }
+  return (data && (data.message || data.error)) || '요청에 실패했어요.';
 }
 
 function normalizeSupabaseUrl(value) {
@@ -119,6 +136,7 @@ if (typeof module !== 'undefined') {
     createRoomApi,
     createConfiguredRoomApi,
     normalizeSupabaseUrl,
+    describeFailure,
     buildHeaders,
     isSecretKey,
   };

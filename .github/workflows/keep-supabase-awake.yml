@@ -1,0 +1,24 @@
+# Supabase 무료 프로젝트는 일주일쯤 DB 사용이 거의 없으면 일시정지됩니다.
+# 하루 세 번 방 조회 함수를 호출해서 사용 기록을 남깁니다. (정지 방지가 보장되지는 않습니다.)
+#
+# 참고: 공개 저장소에서는 60일 동안 저장소 활동이 없으면 깃허브가 이 예약 실행을 끕니다.
+# 꺼졌다는 메일을 받으면 Actions 탭에서 이 워크플로를 다시 켜면 됩니다.
+name: Keep Supabase awake
+
+on:
+  schedule:
+    - cron: '17 1,9,17 * * *' # 매일 10:17, 18:17, 02:17 (한국 시간)
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Call the room lookup function
+        run: node scripts/keep-awake.js
