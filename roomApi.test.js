@@ -77,6 +77,7 @@ test('calls the Supabase functions with the expected arguments', async () => {
   await api.updateRoom('room_1', { confirmedDate: '2026-11-21' });
   await api.addParticipant('room_1', '지혜');
   await api.toggleParticipantDate('room_1', 'p_1', '2026-11-21');
+  await api.removeParticipant('room_1', 'p_1');
 
   assert.deepEqual(
     calls.map((call) => [call.url.replace('https://example.supabase.co/rest/v1/rpc/', ''), call.body]),
@@ -87,6 +88,7 @@ test('calls the Supabase functions with the expected arguments', async () => {
       ['update_room', { p_room_id: 'room_1', p_confirmed_date: '2026-11-21' }],
       ['add_participant', { p_room_id: 'room_1', p_name: '지혜' }],
       ['toggle_participant_date', { p_room_id: 'room_1', p_participant_id: 'p_1', p_date: '2026-11-21' }],
+      ['remove_participant', { p_room_id: 'room_1', p_participant_id: 'p_1' }],
     ]
   );
   assert.equal(calls[0].init.method, 'POST');

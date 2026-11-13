@@ -255,7 +255,14 @@ function renderParticipants() {
       render();
     });
 
-    item.append(dot, copy, button);
+    const removeButton = document.createElement('button');
+    removeButton.type = 'button';
+    removeButton.className = 'remove';
+    removeButton.textContent = '삭제';
+    removeButton.setAttribute('aria-label', `${participant.name} 삭제`);
+    removeButton.addEventListener('click', () => removeParticipant(participant));
+
+    item.append(dot, copy, button, removeButton);
     participantListEl.append(item);
   });
 }
@@ -395,6 +402,28 @@ async function toggleActiveDate(date) {
       saveLocalRoom();
     }
     render();
+  } catch (error) {
+    setStatus(error.message);
+  }
+}
+
+async function removeParticipant(participant) {
+  const sure = window.confirm(`${participant.name}님을 참여자에서 삭제할까요?\n선택한 날짜도 함께 지워져요.`);
+  if (!sure) return;
+
+  try {
+    if (isSharedMode) {
+      room = await change(() => roomApi.removeParticipant(room.id, participant.id));
+    } else {
+      room.participants = room.participants.filter((item) => item.id !== participant.id);
+      saveLocalRoom();
+    }
+    if (activeParticipantId === participant.id) {
+      activeParticipantId = null;
+      window.localStorage.removeItem(activeParticipantKey);
+    }
+    render();
+    setStatus(`${participant.name}님을 삭제했어요.`);
   } catch (error) {
     setStatus(error.message);
   }

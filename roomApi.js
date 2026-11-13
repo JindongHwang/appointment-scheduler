@@ -65,6 +65,8 @@ function createRoomApi(options = {}) {
     getRoom,
     updateRoom,
     addParticipant: (roomId, name) => rpc('add_participant', { p_room_id: roomId, p_name: String(name || '') }),
+    removeParticipant: (roomId, participantId) =>
+      rpc('remove_participant', { p_room_id: roomId, p_participant_id: participantId }),
     toggleParticipantDate: (roomId, participantId, date) =>
       rpc('toggle_participant_date', {
         p_room_id: roomId,
