@@ -1,67 +1,42 @@
-# Deploy Nolaboda
+# 배포하기
 
-This project is ready for a Node web service host. Render is the simplest path because it can run `server.js` directly.
+처음 한 번만 하면 됩니다. Supabase와 깃허브 둘 다 무료 플랜으로 충분합니다.
 
-## 1. Confirm Supabase
+## 1. Supabase 준비
 
-Supabase must already have:
+1. [supabase.com](https://supabase.com)에서 새 프로젝트를 만듭니다. 예전에 만든 프로젝트가 있으면 그걸 써도 됩니다.
+2. 프로젝트의 SQL Editor를 열고 `supabase-schema.sql` 내용을 전부 붙여넣어 실행합니다. 여러 번 실행해도 괜찮습니다.
+3. 프로젝트의 Connect 창에서 두 값을 복사합니다.
+   - 프로젝트 주소: `https://xxxx.supabase.co`
+   - 공개 키: `sb_publishable_...` (예전 프로젝트라면 `anon` 키)
 
-- The tables from `supabase-schema.sql`
-- `SUPABASE_URL`
-- `SUPABASE_SERVICE_ROLE_KEY`
+비밀 키(`sb_secret_...`, `service_role`)는 필요 없습니다. 복사하지 마세요.
 
-Keep the service role key server-side only.
+## 2. config.js 채우기
 
-## 2. Put the Project on GitHub
-
-Create a private GitHub repository and push this folder.
-
-Make sure these files are not uploaded:
-
-- `.env`
-- `rooms.db.json`
-
-They are already listed in `.gitignore`.
-
-## 3. Create a Render Web Service
-
-In Render:
-
-1. New
-2. Web Service
-3. Connect the GitHub repository
-4. Runtime: Node
-5. Build command: `npm install`
-6. Start command: `npm start`
-7. Health check path: `/healthz`
-8. Add environment variables:
-
-```text
-SUPABASE_URL=your Supabase project URL
-SUPABASE_SERVICE_ROLE_KEY=your Supabase service role key
+```js
+window.NOLABODA_CONFIG = {
+  supabaseUrl: 'https://xxxx.supabase.co',
+  supabaseKey: 'sb_publishable_...',
+};
 ```
 
-If you use Render Blueprints, `render.yaml` already defines the service and prompts for the secret values.
+저장한 뒤 `index.html`을 브라우저로 열어 확인합니다. 초대 링크 칸에 `?room=room_...`이 보이고, 이름을 넣고 날짜를 찍은 뒤 새로고침해도 남아 있으면 Supabase 연결이 된 것입니다.
 
-## 4. Verify
+확인이 끝나면 `config.js`를 커밋하고 푸시합니다.
 
-After deploy finishes, open:
+## 3. 깃허브 페이지 켜기
 
-```text
-https://your-render-service.onrender.com/healthz
-```
+1. 무료 플랜에서는 공개 저장소만 깃허브 페이지를 쓸 수 있습니다. 저장소가 비공개라면 Settings에서 공개로 바꿉니다.
+2. 저장소 Settings의 Pages에서 Source를 "Deploy from a branch"로, 브랜치를 `main`, 폴더를 `/ (root)`로 고르고 저장합니다.
+3. 1~2분 뒤 `https://<깃허브 아이디>.github.io/appointment-scheduler/`로 접속합니다.
 
-Expected response:
+## 4. 친구에게 보내기
 
-```json
-{"ok":true,"store":"supabase"}
-```
+페이지를 열면 방이 자동으로 만들어집니다. 초대 링크의 "복사"를 눌러 친구에게 보내면 됩니다. 다른 사람이 고른 날짜는 5초쯤 뒤에 자동으로 반영됩니다.
 
-Then open the app URL, create a room, add a participant, select a date, and refresh the page. If the selected date remains, Supabase persistence is working.
+## 알아둘 점
 
-## Local Commands
-
-```powershell
-npm.cmd test
-npm.cmd start
-```
+- Supabase 무료 프로젝트는 일주일쯤 사용이 거의 없으면 일시정지됩니다. 오랜만에 열었는데 연결 오류가 나면 Supabase 대시보드에서 프로젝트를 다시 켜세요. 데이터는 남아 있습니다.
+- 방과 참여자는 브라우저에서 지울 수 없습니다. 정리하려면 Supabase 대시보드의 Table Editor에서 `rooms`의 행을 지우면 참여자도 함께 지워집니다.
+- 깃허브 페이지 대신 Cloudflare Pages, Netlify 같은 다른 정적 호스팅에 올려도 똑같이 동작합니다. 이쪽은 비공개 저장소도 연결할 수 있습니다.
