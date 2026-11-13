@@ -2,7 +2,7 @@
 -- Run this whole file once in the Supabase SQL editor. It is safe to run again.
 --
 -- How access works:
---   * The page only calls the five functions at the bottom (create_room, get_room, ...).
+--   * The page only calls the six functions at the bottom (create_room, get_room, ...).
 --   * Every function first records which room it is working on. The row level security
 --     policies only let a request see or change rows of that one room.
 --   * Reading the tables directly through the Data API returns nothing, so nobody can
@@ -39,6 +39,7 @@ drop policy if exists "rooms current room update" on public.rooms;
 drop policy if exists "participants current room select" on public.participants;
 drop policy if exists "participants current room insert" on public.participants;
 drop policy if exists "participants current room update" on public.participants;
+drop policy if exists "participants current room delete" on public.participants;
 
 create policy "rooms current room select" on public.rooms
   for select to anon, authenticated
@@ -66,11 +67,16 @@ create policy "participants current room update" on public.participants
   using (room_id = current_setting('nolaboda.room_id', true))
   with check (room_id = current_setting('nolaboda.room_id', true));
 
--- No delete for the browser roles. Rows are only removed from the Supabase dashboard.
+create policy "participants current room delete" on public.participants
+  for delete to anon, authenticated
+  using (room_id = current_setting('nolaboda.room_id', true));
+
+-- Rooms cannot be deleted from the browser; remove them from the Supabase dashboard.
+-- Participants can be removed, but only inside the room the request names.
 revoke all on table public.rooms from anon, authenticated;
 revoke all on table public.participants from anon, authenticated;
 grant select, insert, update on table public.rooms to anon, authenticated;
-grant select, insert, update on table public.participants to anon, authenticated;
+grant select, insert, update, delete on table public.participants to anon, authenticated;
 
 -- ---------------------------------------------------------------------------
 -- Functions (called as /rest/v1/rpc/<name>)
@@ -184,7 +190,16 @@ begin
   end if;
 
   v_name := coalesce(nullif(btrim(left(coalesce(p_name, ''), 12)), ''), 'Friend ' || (v_count + 1));
-  v_color := v_colors[(v_count % 5) + 1];
+
+  -- Prefer a colour nobody in the room has, so colours stay distinct after someone is removed.
+  select c into v_color
+  from unnest(v_colors) with ordinality as t(c, ord)
+  where c not in (select color from public.participants where room_id = p_room_id)
+  order by ord
+  limit 1;
+  if v_color is null then
+    v_color := v_colors[(v_count % 5) + 1];
+  end if;
 
   insert into public.participants (id, room_id, name, color)
   values (v_id, p_room_id, v_name, v_color);
@@ -228,18 +243,40 @@ begin
 end;
 $$;
 
--- Only these five functions are callable from the browser.
+create or replace function public.remove_participant(p_room_id text, p_participant_id text)
+returns jsonb
+language plpgsql
+set search_path = ''
+as $$
+begin
+  perform set_config('nolaboda.room_id', coalesce(p_room_id, ''), true);
+
+  delete from public.participants
+  where id = p_participant_id
+    and room_id = p_room_id;
+
+  if not found then
+    raise exception '참여자를 찾을 수 없어요.';
+  end if;
+
+  return public.get_room(p_room_id);
+end;
+$$;
+
+-- Only these six functions are callable from the browser.
 revoke all on function public.get_room(text) from public;
 revoke all on function public.create_room(text) from public;
 revoke all on function public.update_room(text, text, text) from public;
 revoke all on function public.add_participant(text, text) from public;
 revoke all on function public.toggle_participant_date(text, text, text) from public;
+revoke all on function public.remove_participant(text, text) from public;
 
 grant execute on function public.get_room(text) to anon, authenticated;
 grant execute on function public.create_room(text) to anon, authenticated;
 grant execute on function public.update_room(text, text, text) to anon, authenticated;
 grant execute on function public.add_participant(text, text) to anon, authenticated;
 grant execute on function public.toggle_participant_date(text, text, text) to anon, authenticated;
+grant execute on function public.remove_participant(text, text) to anon, authenticated;
 
 -- Make the Data API pick up the new functions right away.
 notify pgrst, 'reload schema';
