@@ -237,12 +237,21 @@ function renderParticipants() {
     count.textContent = `${participant.availableDates.length}일 선택`;
     copy.append(name, count);
 
+    const isActive = participant.id === activeParticipantId;
     const button = document.createElement('button');
     button.type = 'button';
-    button.textContent = participant.id === activeParticipantId ? '선택 중' : '선택';
+    button.textContent = isActive ? '선택 중' : '선택';
+    button.classList.toggle('active', isActive);
+    button.setAttribute('aria-pressed', String(isActive));
     button.addEventListener('click', () => {
-      activeParticipantId = participant.id;
-      window.localStorage.setItem(activeParticipantKey, activeParticipantId);
+      // 다시 누르면 선택이 풀린다. 선택한 사람이 없으면 달력을 눌러도 아무것도 바뀌지 않는다.
+      if (participant.id === activeParticipantId) {
+        activeParticipantId = null;
+        window.localStorage.removeItem(activeParticipantKey);
+      } else {
+        activeParticipantId = participant.id;
+        window.localStorage.setItem(activeParticipantKey, activeParticipantId);
+      }
       render();
     });
 
@@ -286,6 +295,7 @@ function renderCalendar() {
       'day-cell',
       activeParticipant ? 'selectable' : 'disabled',
       summary.bestDates.includes(date) ? 'best' : '',
+      room.confirmedDate === date ? 'confirmed' : '',
       selectedByMe ? 'selected-by-me' : '',
     ].join(' ');
     cell.disabled = !activeParticipant;
@@ -324,26 +334,34 @@ function renderBestDates() {
   const summary = summarizeAvailability(room.participants);
   bestDatesEl.innerHTML = '';
 
-  if (!summary.bestDates.length) {
+  // 확정된 날짜는 추천 순위에서 밀려나도 항상 보여서, 언제든 취소할 수 있게 한다.
+  const best = summary.bestDates.slice(0, 3);
+  const dates = room.confirmedDate && !best.includes(room.confirmedDate)
+    ? [room.confirmedDate, ...best]
+    : best;
+
+  if (!dates.length) {
     bestDatesEl.innerHTML = '<p class="empty-copy">아직 선택된 날짜가 없어요.</p>';
     return;
   }
 
-  summary.bestDates.slice(0, 3).forEach((date) => {
+  dates.forEach((date) => {
+    const info = summary.dates[date] || { count: 0, names: [] };
+    const confirmed = room.confirmedDate === date;
     const item = document.createElement('div');
-    item.className = 'best-date';
+    item.className = confirmed ? 'best-date confirmed' : 'best-date';
 
     const title = document.createElement('strong');
-    title.textContent = `${formatKoreanDate(date)} (${summary.dates[date].count}/${room.participants.length})`;
+    title.textContent = `${formatKoreanDate(date)} (${info.count}/${room.participants.length})${confirmed ? ' · 확정됨' : ''}`;
 
     const names = document.createElement('span');
-    names.textContent = summary.dates[date].names.join(', ');
+    names.textContent = info.names.join(', ') || '아직 이 날짜를 고른 사람이 없어요.';
 
     const button = document.createElement('button');
     button.type = 'button';
-    button.className = 'confirm-button';
-    button.textContent = room.confirmedDate === date ? '확정됨' : '확정';
-    button.addEventListener('click', () => confirmDate(date));
+    button.className = confirmed ? 'confirm-button cancel' : 'confirm-button';
+    button.textContent = confirmed ? '확정 취소' : '확정';
+    button.addEventListener('click', () => setConfirmedDate(confirmed ? '' : date));
 
     item.append(title, names, button);
     bestDatesEl.append(item);
@@ -354,7 +372,9 @@ function renderSelectionNote() {
   const activeParticipant = getActiveParticipant();
   const base = activeParticipant
     ? `${activeParticipant.name}님이 날짜를 선택 중이에요.`
-    : '먼저 이름을 입력해 주세요.';
+    : room.participants.length
+      ? "참여자에서 내 이름 옆의 '선택'을 누르거나, 새 이름으로 참여해 주세요."
+      : '먼저 이름을 입력해 주세요.';
   selectionNoteEl.textContent = room.confirmedDate
     ? `${base} 확정된 날짜는 ${formatKoreanDate(room.confirmedDate)}입니다.`
     : base;
@@ -380,7 +400,8 @@ async function toggleActiveDate(date) {
   }
 }
 
-async function confirmDate(date) {
+// date가 빈 문자열이면 확정을 취소한다.
+async function setConfirmedDate(date) {
   try {
     if (isSharedMode) {
       room = await change(() => roomApi.updateRoom(room.id, { confirmedDate: date }));
@@ -389,7 +410,7 @@ async function confirmDate(date) {
       saveLocalRoom();
     }
     render();
-    setStatus(`${formatKoreanDate(date)}로 확정했어요.`);
+    setStatus(date ? `${formatKoreanDate(date)}로 확정했어요.` : '확정을 취소했어요.');
   } catch (error) {
     setStatus(error.message);
   }
@@ -400,10 +421,9 @@ function ensureActiveParticipant() {
     return;
   }
 
-  activeParticipantId = room.participants[0]?.id || null;
-  if (activeParticipantId) {
-    window.localStorage.setItem(activeParticipantKey, activeParticipantId);
-  }
+  // 누구로 날짜를 고를지는 직접 정한다. 첫 참여자를 자동으로 고르면
+  // 링크로 들어온 사람이 다른 사람의 날짜를 실수로 바꾸게 된다.
+  activeParticipantId = null;
 }
 
 function addLocalParticipant(name) {
