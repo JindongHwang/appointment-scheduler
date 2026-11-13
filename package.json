@@ -2,9 +2,7 @@
   "name": "nolaboda",
   "version": "0.1.0",
   "private": true,
-  "main": "server.js",
   "scripts": {
-    "start": "node server.js",
-    "test": "node scheduler.test.js && node roomStore.test.js && node storeFactory.test.js && node envLoader.test.js && node supabaseRoomStore.test.js && node roomSession.test.js && node api.test.js && node --check app.js && node --check server.js && node --check supabaseRoomStore.js && node --check storeFactory.js && node --check envLoader.js && node --check roomSession.js"
+    "test": "node scheduler.test.js && node roomSession.test.js && node roomApi.test.js && node --check app.js && node --check roomApi.js && node --check roomSession.js && node --check scheduler.js && node --check config.js"
   }
 }

@@ -1,13 +1,26 @@
 const colors = ['#4f9d76', '#ef7d6b', '#5f8fc7', '#e4b94f', '#9b72cf'];
 const weekdays = ['일', '월', '화', '수', '목', '금', '토'];
-const defaultTitle = '5월 친구 모임';
-const isServerMode = window.location.protocol === 'http:' || window.location.protocol === 'https:';
+const today = new Date();
+const defaultTitle = `${today.getMonth() + 1}월 친구 모임`;
+const refreshIntervalMs = 5000;
+
+// config.js가 채워져 있으면 Supabase에 저장하는 공유 모드, 비어 있으면 이 브라우저에만 저장하는 체험 모드.
+let roomApi = null;
+let configError = '';
+try {
+  roomApi = createConfiguredRoomApi(window.NOLABODA_CONFIG);
+} catch (error) {
+  configError = error.message;
+}
+const isSharedMode = Boolean(roomApi);
 const activeParticipantKey = 'nolaboda.activeParticipantId';
 const lastRoomKey = 'nolaboda.lastRoomId';
 
-let visibleDate = new Date(2026, 4, 1);
+let visibleDate = new Date(today.getFullYear(), today.getMonth(), 1);
 let activeParticipantId = window.localStorage.getItem(activeParticipantKey);
 let room = null;
+let pendingChanges = 0;
+let changeCount = 0;
 
 const calendarEl = document.querySelector('#calendar');
 const monthLabelEl = document.querySelector('#monthLabel');
@@ -40,11 +53,8 @@ participantForm.addEventListener('submit', async (event) => {
 
   try {
     setStatus('참여자를 추가하고 있어요.');
-    const participant = isServerMode
-      ? await api(`/api/rooms/${room.id}/participants`, {
-          method: 'POST',
-          body: { name },
-        })
+    const participant = isSharedMode
+      ? await change(() => roomApi.addParticipant(room.id, name))
       : addLocalParticipant(name);
 
     activeParticipantId = participant.id;
@@ -60,11 +70,8 @@ participantForm.addEventListener('submit', async (event) => {
 saveTitleButton.addEventListener('click', async () => {
   const title = eventTitleInput.value.trim() || defaultTitle;
   try {
-    if (isServerMode) {
-      room = await api(`/api/rooms/${room.id}`, {
-        method: 'PATCH',
-        body: { title },
-      });
+    if (isSharedMode) {
+      room = await change(() => roomApi.updateRoom(room.id, { title }));
     } else {
       room.title = title;
       saveLocalRoom();
@@ -89,11 +96,8 @@ copyLinkButton.addEventListener('click', async () => {
 
 newRoomButton.addEventListener('click', async () => {
   try {
-    if (isServerMode) {
-      room = await api('/api/rooms', {
-        method: 'POST',
-        body: { title: defaultTitle },
-      });
+    if (isSharedMode) {
+      room = await change(() => roomApi.createRoom({ title: defaultTitle }));
       rememberRoom(room.id);
       updateRoomUrl(room.id);
     } else {
@@ -111,11 +115,12 @@ newRoomButton.addEventListener('click', async () => {
 
 async function init() {
   try {
-    if (isServerMode) {
-      await initServerRoom();
+    if (isSharedMode) {
+      await initSharedRoom();
+      startAutoRefresh();
     } else {
       room = loadLocalRoom();
-      setStatus('서버로 열면 친구에게 보낼 수 있는 링크가 생겨요.');
+      setStatus(configError || 'config.js에 Supabase 주소와 키를 넣으면 친구에게 보낼 수 있는 링크가 생겨요.');
     }
     ensureActiveParticipant();
     render();
@@ -127,7 +132,7 @@ async function init() {
   }
 }
 
-async function initServerRoom() {
+async function initSharedRoom() {
   const roomId = resolveInitialRoomId(
     window.location.search,
     window.localStorage.getItem(lastRoomKey)
@@ -135,7 +140,7 @@ async function initServerRoom() {
 
   if (roomId) {
     try {
-      room = await api(`/api/rooms/${roomId}`);
+      room = await roomApi.getRoom(roomId);
       rememberRoom(room.id);
       updateRoomUrl(room.id);
       setStatus(new URLSearchParams(window.location.search).get('room') ? '초대 링크로 들어왔어요.' : '마지막 약속을 불러왔어요.');
@@ -148,18 +153,15 @@ async function initServerRoom() {
     }
   }
 
-  room = await api('/api/rooms', {
-    method: 'POST',
-    body: { title: defaultTitle },
-  });
+  room = await change(() => roomApi.createRoom({ title: defaultTitle }));
   rememberRoom(room.id);
   updateRoomUrl(room.id);
   setStatus('새 약속 링크를 만들었어요.');
 }
 
 async function refreshRoom() {
-  if (isServerMode) {
-    room = await api(`/api/rooms/${room.id}`);
+  if (isSharedMode) {
+    room = await roomApi.getRoom(room.id);
   } else {
     saveLocalRoom();
   }
@@ -168,7 +170,9 @@ async function refreshRoom() {
 }
 
 function render() {
-  eventTitleInput.value = room.title;
+  if (document.activeElement !== eventTitleInput) {
+    eventTitleInput.value = room.title;
+  }
   shareLinkInput.value = getShareLink();
   renderParticipants();
   renderCalendar();
@@ -329,11 +333,8 @@ async function toggleActiveDate(date) {
   if (!activeParticipant) return;
 
   try {
-    if (isServerMode) {
-      room = await api(`/api/rooms/${room.id}/participants/${activeParticipant.id}/dates`, {
-        method: 'PATCH',
-        body: { date },
-      });
+    if (isSharedMode) {
+      room = await change(() => roomApi.toggleParticipantDate(room.id, activeParticipant.id, date));
     } else {
       room.participants = room.participants.map((participant) => {
         if (participant.id !== activeParticipant.id) return participant;
@@ -349,11 +350,8 @@ async function toggleActiveDate(date) {
 
 async function confirmDate(date) {
   try {
-    if (isServerMode) {
-      room = await api(`/api/rooms/${room.id}`, {
-        method: 'PATCH',
-        body: { confirmedDate: date },
-      });
+    if (isSharedMode) {
+      room = await change(() => roomApi.updateRoom(room.id, { confirmedDate: date }));
     } else {
       room.confirmedDate = date;
       saveLocalRoom();
@@ -392,14 +390,15 @@ function loadLocalRoom() {
 }
 
 function createLocalRoom() {
+  const sample = (...days) => days.map((day) => formatDate(today.getFullYear(), today.getMonth(), day));
   return {
     id: 'local',
     title: defaultTitle,
     confirmedDate: '',
     participants: [
-      { ...createParticipant('지혜', ['2026-05-02', '2026-05-10', '2026-05-17', '2026-05-24']), color: colors[0] },
-      { ...createParticipant('민수', ['2026-05-02', '2026-05-03', '2026-05-16']), color: colors[1] },
-      { ...createParticipant('수빈', ['2026-05-02', '2026-05-16', '2026-05-23']), color: colors[2] },
+      { ...createParticipant('지혜', sample(2, 10, 17, 24)), color: colors[0] },
+      { ...createParticipant('민수', sample(2, 3, 16)), color: colors[1] },
+      { ...createParticipant('수빈', sample(2, 16, 23)), color: colors[2] },
     ],
   };
 }
@@ -408,18 +407,41 @@ function saveLocalRoom() {
   window.localStorage.setItem('nolaboda.localRoom', JSON.stringify(room));
 }
 
-async function api(path, options = {}) {
-  const response = await fetch(path, {
-    method: options.method || 'GET',
-    headers: { 'Content-Type': 'application/json' },
-    body: options.body ? JSON.stringify(options.body) : undefined,
-  });
-
-  const data = await response.json();
-  if (!response.ok) {
-    throw new Error(data.error || '요청에 실패했어요.');
+// 공유 방을 바꾸는 요청을 감싼다. 진행 중이거나 방금 끝난 변경이 있으면
+// 그보다 먼저 출발한 자동 새로고침 결과가 화면을 덮어쓰지 못하게 한다.
+async function change(run) {
+  pendingChanges += 1;
+  changeCount += 1;
+  try {
+    return await run();
+  } finally {
+    pendingChanges -= 1;
   }
-  return data;
+}
+
+// 다른 사람이 고른 날짜가 새로고침 없이 보이도록 주기적으로 방을 다시 읽는다.
+function startAutoRefresh() {
+  window.setInterval(refreshFromOthers, refreshIntervalMs);
+  document.addEventListener('visibilitychange', () => {
+    if (!document.hidden) refreshFromOthers();
+  });
+}
+
+async function refreshFromOthers() {
+  if (!room || document.hidden || pendingChanges > 0) return;
+
+  const roomId = room.id;
+  const seenChanges = changeCount;
+  try {
+    const latest = await roomApi.getRoom(roomId);
+    if (pendingChanges > 0 || seenChanges !== changeCount || room.id !== roomId) return;
+    if (JSON.stringify(latest) === JSON.stringify(room)) return;
+    room = latest;
+    ensureActiveParticipant();
+    render();
+  } catch {
+    // 일시적인 오류는 다음 주기에 다시 시도한다.
+  }
 }
 
 function updateRoomUrl(roomId) {
@@ -427,8 +449,8 @@ function updateRoomUrl(roomId) {
 }
 
 function getShareLink() {
-  if (!isServerMode) {
-    return '서버 실행 후 링크가 표시됩니다.';
+  if (!isSharedMode) {
+    return 'Supabase 설정 후 링크가 표시됩니다.';
   }
 
   return buildRoomUrl(window.location.href, room.id);
